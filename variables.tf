@@ -69,3 +69,10 @@ variable "rate_limit_ban_duration_sec" {
   type        = number
   default     = 300
 }
+
+variable "domain_name" {
+  description = "Custom domain name for Google-managed SSL certificate and HTTPS Load Balancer"
+  type        = string
+  default     = "armor.cloudwithmagna.com"
+}
+

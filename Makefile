@@ -8,6 +8,8 @@ PROJECT_ID  ?= dev-robifirmansyah
 REGION      ?= asia-southeast2
 ZONE        ?= asia-southeast2-a
 NAME_PREFIX ?= smg-armor
+DOMAIN_NAME ?= armor.cloudwithmagna.com
+TARGET_URL  ?= https://$(DOMAIN_NAME)
 MIG_NAME    ?= $(NAME_PREFIX)-mig
 POLICY_NAME ?= $(NAME_PREFIX)-waf-policy
 
@@ -54,18 +56,25 @@ roll-backend:
 		--max-unavailable=0
 
 attack-drill:
-	@echo "==> [SMG] Launching OWASP Top 10 & Layer 7 DDoS Live Attack Simulation..."
-	python3 scripts/attack_drill.py
+	@echo "==> [SMG] Launching OWASP Top 10 & Layer 7 DDoS Live Attack Simulation against $(TARGET_URL)..."
+	python3 scripts/attack_drill.py --target $(TARGET_URL)
 
 verify-logs:
 	@echo "==> [SMG] Fetching Real-Time Google Cloud Armor Telemetry from Cloud Logging..."
 	python3 scripts/verify_logs.py --project=$(PROJECT_ID) --policy=$(POLICY_NAME)
 
 status:
-	@echo "==> [SMG] Checking Backend Health & Security Policy Attachment..."
+	@echo "==> [SMG] Checking Backend Health, SSL Certificate & Security Policy Attachment..."
 	@echo "Load Balancer Anycast IP : $$(terraform output -raw lb_external_ip 2>/dev/null || echo 'N/A')"
+	@echo "Custom Domain Name       : $$(terraform output -raw domain_name 2>/dev/null || echo '$(DOMAIN_NAME)')"
+	@echo "HTTPS Target URL         : $$(terraform output -raw https_url 2>/dev/null || echo '$(TARGET_URL)')"
+	@echo "Google-Managed SSL Cert  : $$(terraform output -raw ssl_cert_name 2>/dev/null || echo 'N/A')"
 	@echo "Backend Service Name     : $$(terraform output -raw backend_service_name 2>/dev/null || echo 'N/A')"
 	@echo "Cloud Armor WAF Policy   : $$(terraform output -raw security_policy_name 2>/dev/null || echo 'N/A')"
+	gcloud compute ssl-certificates describe $(NAME_PREFIX)-ssl-cert \
+		--global \
+		--project=$(PROJECT_ID) \
+		--format="table(name,type,managed.status,managed.domainStatus)" || true
 	gcloud compute backend-services get-health $(NAME_PREFIX)-backend-svc \
 		--global \
 		--project=$(PROJECT_ID) || true
@@ -73,3 +82,4 @@ status:
 destroy:
 	@echo "==> [SMG] Destroying SMG Cloud Armor Demo Infrastructure..."
 	terraform destroy -var-file=terraform.tfvars -auto-approve
+

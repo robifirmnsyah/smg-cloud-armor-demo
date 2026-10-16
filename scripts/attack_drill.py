@@ -19,6 +19,7 @@ Executes 6 live scenarios against the Global External Application Load Balancer:
 import argparse
 import concurrent.futures
 import os
+import ssl
 import subprocess
 import sys
 import time
@@ -28,6 +29,9 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
+
+DEFAULT_HTTPS_URL = "https://armor.cloudwithmagna.com"
+_SSL_CONTEXT = ssl.create_default_context()
 
 
 # ---------------------------------------------------------------------------
@@ -82,33 +86,31 @@ def print_banner(target_url: str) -> None:
 
 
 def resolve_target_url(cli_target: Optional[str]) -> str:
-    """Resolve target Load Balancer URL from CLI arg, env var, or Terraform output."""
+    """Resolve target Load Balancer URL from CLI arg, env var, Terraform output, or default HTTPS domain."""
     target = cli_target or os.environ.get("TARGET_URL") or os.environ.get("LB_IP")
     if not target:
-        try:
-            proc = subprocess.run(
-                ["terraform", "output", "-raw", "lb_external_ip"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            if proc.returncode == 0 and proc.stdout.strip():
-                target = proc.stdout.strip()
-        except Exception:
-            pass
+        for output_key in ("https_url", "domain_name"):
+            try:
+                proc = subprocess.run(
+                    ["terraform", "output", "-raw", output_key],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                if proc.returncode == 0 and proc.stdout.strip():
+                    val = proc.stdout.strip()
+                    if "No outputs found" not in val and "Warning:" not in val:
+                        target = val
+                        break
+            except Exception:
+                pass
 
     if not target:
-        print(
-            f"{Color.RED}{Color.BOLD}[ERROR]{Color.RESET} Unable to auto-detect Load Balancer IP."
-        )
-        print(
-            f"Please specify `--target http://<LB_IP>` or run `terraform apply` first."
-        )
-        sys.exit(1)
+        target = DEFAULT_HTTPS_URL
 
     if not target.startswith("http://") and not target.startswith("https://"):
-        target = f"http://{target}"
+        target = f"https://{target}"
     return target.rstrip("/")
 
 
@@ -119,7 +121,8 @@ def send_http_request(
     body: Optional[bytes] = None,
     timeout: float = 10.0,
 ) -> Tuple[int, float, str]:
-    """Send an HTTP request and return (status_code, latency_ms, response_snippet)."""
+    """Send an HTTP/HTTPS request and return (status_code, latency_ms, response_snippet)."""
+    global _SSL_CONTEXT
     req_headers = {
         "User-Agent": "SMG-Security-Drill-Agent/2.0 (Enterprise-WAF-Validation)",
         "Accept": "application/json, text/html, */*",
@@ -130,7 +133,7 @@ def send_http_request(
     req = urllib.request.Request(url, data=body, headers=req_headers, method=method)
     start = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
             latency_ms = (time.perf_counter() - start) * 1000.0
             status = resp.getcode()
             raw = resp.read(256).decode("utf-8", errors="replace")
@@ -143,6 +146,29 @@ def send_http_request(
         except Exception:
             pass
         return http_err.code, latency_ms, raw
+    except urllib.error.URLError as url_err:
+        if isinstance(getattr(url_err, "reason", None), ssl.SSLError):
+            _SSL_CONTEXT = ssl._create_unverified_context()
+            start_retry = time.perf_counter()
+            try:
+                with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
+                    latency_ms = (time.perf_counter() - start_retry) * 1000.0
+                    status = resp.getcode()
+                    raw = resp.read(256).decode("utf-8", errors="replace")
+                    return status, latency_ms, raw
+            except urllib.error.HTTPError as http_err:
+                latency_ms = (time.perf_counter() - start_retry) * 1000.0
+                raw = ""
+                try:
+                    raw = http_err.read(256).decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                return http_err.code, latency_ms, raw
+            except Exception as exc:
+                latency_ms = (time.perf_counter() - start_retry) * 1000.0
+                return 0, latency_ms, str(exc)
+        latency_ms = (time.perf_counter() - start) * 1000.0
+        return 0, latency_ms, str(url_err)
     except Exception as exc:
         latency_ms = (time.perf_counter() - start) * 1000.0
         return 0, latency_ms, str(exc)

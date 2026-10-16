@@ -8,6 +8,7 @@ project_id  = "dev-robifirmansyah"
 region      = "asia-southeast2"
 zone        = "asia-southeast2-a"
 name_prefix = "smg-armor"
+domain_name = "armor.cloudwithmagna.com"
 
 subnet_cidr       = "10.30.0.0/24"
 proxy_subnet_cidr = "10.30.1.0/24"
@@ -17,3 +18,4 @@ mig_target_size   = 2
 rate_limit_count            = 50
 rate_limit_interval_sec     = 60
 rate_limit_ban_duration_sec = 300
+

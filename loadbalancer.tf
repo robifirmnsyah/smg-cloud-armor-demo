@@ -70,14 +70,55 @@ resource "google_compute_url_map" "url_map" {
   default_service = google_compute_backend_service.backend_service.id
 }
 
-# 5. Target HTTP Proxy
+# 5. Google-Managed SSL Certificate for Custom Domain
+resource "google_compute_managed_ssl_certificate" "ssl_cert" {
+  name        = "${var.name_prefix}-ssl-cert"
+  description = "Google-managed SSL certificate for ${var.domain_name}"
+
+  managed {
+    domains = [var.domain_name]
+  }
+}
+
+# 6. Target HTTPS Proxy
+resource "google_compute_target_https_proxy" "https_proxy" {
+  name             = "${var.name_prefix}-https-proxy"
+  description      = "Target HTTPS Proxy for Global External Application Load Balancer"
+  url_map          = google_compute_url_map.url_map.id
+  ssl_certificates = [google_compute_managed_ssl_certificate.ssl_cert.id]
+}
+
+# 7. Global Forwarding Rule (Port 443 -> Target HTTPS Proxy)
+resource "google_compute_global_forwarding_rule" "https_forwarding_rule" {
+  name                  = "${var.name_prefix}-https-fwd-rule"
+  description           = "Global Anycast HTTPS Forwarding Rule on Port 443"
+  ip_protocol           = "TCP"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  port_range            = "443"
+  target                = google_compute_target_https_proxy.https_proxy.id
+  ip_address            = google_compute_global_address.lb_ip.id
+}
+
+# 8. HTTP-to-HTTPS Redirect URL Map
+resource "google_compute_url_map" "https_redirect" {
+  name        = "${var.name_prefix}-https-redirect"
+  description = "URL Map redirecting HTTP traffic on Port 80 to HTTPS on Port 443"
+
+  default_url_redirect {
+    https_redirect         = true
+    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    strip_query            = false
+  }
+}
+
+# 9. Target HTTP Proxy (Redirects Port 80 -> HTTPS)
 resource "google_compute_target_http_proxy" "http_proxy" {
   name        = "${var.name_prefix}-http-proxy"
   description = "Target HTTP Proxy for Global External Application Load Balancer"
-  url_map     = google_compute_url_map.url_map.id
+  url_map     = google_compute_url_map.https_redirect.id
 }
 
-# 6. Global Forwarding Rule (Port 80 -> Target HTTP Proxy)
+# 10. Global Forwarding Rule (Port 80 -> Target HTTP Proxy)
 resource "google_compute_global_forwarding_rule" "http_forwarding_rule" {
   name                  = "${var.name_prefix}-http-fwd-rule"
   description           = "Global Anycast HTTP Forwarding Rule on Port 80"
@@ -87,3 +128,4 @@ resource "google_compute_global_forwarding_rule" "http_forwarding_rule" {
   target                = google_compute_target_http_proxy.http_proxy.id
   ip_address            = google_compute_global_address.lb_ip.id
 }
+
