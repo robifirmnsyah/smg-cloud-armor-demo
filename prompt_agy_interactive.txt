@@ -1,0 +1,19 @@
+Anda adalah Cloud Security Engineer di PT Smartnet Magna Global (SMG).
+User meminta agar web aplikasi di https://armor.cloudwithmagna.com/ dibuat INTERAKTIF untuk pengujian Cloud Armor, sehingga pengguna atau klien cukup mengklik tombol-tombol di web untuk melakukan pengujian langsung dari browser.
+
+Tugas Anda di repositori /home/robifirmansyah/smg-cloud-armor-demo:
+1. Perbarui kode web application di `compute.tf` (pada `backend_startup_script`):
+   - Halaman root `GET /` harus menampilkan 'Cloud Armor Interactive Security Playground' yang modern, rapi, dan responsif (menggunakan Tailwind CSS CDN & FontAwesome).
+   - Di halaman tersebut terdapat 6 kartu tes interaktif:
+     1) Test 1: Benign Normal Traffic (`GET /api/search?q=enterprise+cloud+security`) -> Action button 'Test Normal Traffic' -> Expect HTTP 200 OK.
+     2) Test 2: SQL Injection (`GET /api/search?q=1' OR 1=1 --`) -> Action button 'Launch SQLi Attack' -> Expect HTTP 403 Forbidden (Blocked by Rule Priority 1000: sqli-v33-stable).
+     3) Test 3: Cross-Site Scripting XSS (`GET /api/search?q=<script>alert('pwned')</script>`) -> Action button 'Launch XSS Attack' -> Expect HTTP 403 Forbidden (Blocked by Rule Priority 1010: xss-v33-stable).
+     4) Test 4: Path Traversal / LFI (`GET /api/view?file=../../../../etc/passwd`) -> Action button 'Launch LFI Attack' -> Expect HTTP 403 Forbidden (Blocked by Rule Priority 1020: lfi-v33-stable).
+     5) Test 5: Remote Code Execution RCE (`POST /api/comment?cmd=cat /etc/passwd; id`) -> Action button 'Launch RCE Attack' -> Expect HTTP 403 Forbidden (Blocked by Rule Priority 1030: rce-v33-stable).
+     6) Test 6: Layer 7 DDoS Flood Simulation (Kirim 60 request parallel via Promise.all) -> Action button 'Simulate L7 DDoS (Burst 60)' -> Expect HTTP 429 Too Many Requests (Tripped Rule Priority 2000: Rate-Based Ban).
+   - Tombol Master 'Run All Attack Tests' yang menjalankan test 1 sampai 6 secara otomatis berurutan.
+   - Live Security Terminal / Console di sebelah kanan yang mencatat setiap request dan respons secara real-time dengan latency ms dan indikator status.
+   - Ikon link eksternal di tiap kartu untuk membuka URL di tab baru (jika user ingin melihat halaman error native 403 Google Front End).
+   - Tetap sediakan endpoint backend: `GET /health` (untuk health check LB), `GET /api/search`, `POST /api/comment`, `GET /api/view`.
+2. Validasi file Terraform dengan `terraform fmt` dan `terraform validate`.
+3. Buat juga file standalone `app/app.py` di dalam repositori agar kode backend mudah diinspeksi dan dapat di-deploy langsung ke VM aktif.
