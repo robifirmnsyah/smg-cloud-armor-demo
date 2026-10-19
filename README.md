@@ -113,9 +113,3 @@ make destroy
 ```
 
 ---
-
-## 5. Nilai Jual untuk Customer (Pitch Guide)
-
-* **Cost Efficiency vs Hardware WAF:** Menggantikan appliance WAF fisik/virtual yang mahal dengan model bayar sesuai penggunaan (pay-as-you-go).
-* **Performa Sub-Milidetik:** Terintegrasi langsung di Google Anycast Network, memotong latensi hingga 40% dibandingkan reverse-proxy WAF pihak ketiga.
-* **Kepatuhan Regulasi:** Memenuhi standar kepatuhan PCI-DSS 6.6 dan regulasi OJK/FSI untuk perlindungan web publik.
